@@ -1,4 +1,5 @@
 import os
+import json
 #from sqlite3.dbapi2 import Date
 import sys
 import random
@@ -64,29 +65,34 @@ class MC(Mqtt_client):
     def __init__(self):
         super().__init__()
     def on_message(self, client, userdata, msg):
-            global WatMet
-            topic=msg.topic            
-            m_decode=str(msg.payload.decode("utf-8","ignore"))
-            ic("message from:"+topic, m_decode)
-            if 'Room_1' in topic:
-                mainwin.airconditionDock.update_temp_Room(check(m_decode.split('Temperature: ')[1].split(' Humidity: ')[0]))
-            if 'Common' in topic:            
-                mainwin.airconditionDock.update_temp_Room(check(m_decode.split('Temperature: ')[1].split(' Humidity: ')[0]))
-            if 'Home' in topic:               
-                if WatMet:
-                    mainwin.graphsDock.update_electricity_meter(check(m_decode.split('Electricity: ')[1].split(' Water: ')[0]))
-                    WatMet = False
-                else:
-                    mainwin.graphsDock.update_water_meter(check(m_decode.split(' Water: ')[1]))
-                    WatMet = True
-            if 'alarm' in topic:            
-                mainwin.statusDock.update_mess_win(da.timestamp()+': ' + m_decode)
-            if 'boiler' in topic:
-                mainwin.statusDock.boilerTemp.setText(check(m_decode.split('Temperature: ')[1]))
-            if 'freezer' in topic:
-                mainwin.statusDock.freezerTemp.setText(check(m_decode.split('Temperature: ')[1]))
-            if 'refrigerator' in topic:
-                mainwin.statusDock.fridgeTemp.setText(check(m_decode.split('Temperature: ')[1]))    
+            topic = msg.topic            
+            m_decode = str(msg.payload.decode("utf-8","ignore"))
+            
+            if 'greenhouse/sensor/dht' in topic:
+                try:
+                    data = json.loads(m_decode)
+                    temp = str(data['temp'])
+                    hum = str(data['hum'])
+                    
+                    try:
+                        mainwin.statusDock.update_sensors(temp, hum)
+                        
+                        hum_val = float(hum)
+                        
+                        if hum_val < 50:
+                            pump_cmd = "ON"
+                            self.publish_to('greenhouse/actuators/pump', 'ON') 
+                        else:
+                            pump_cmd = "OFF"
+                            self.publish_to('greenhouse/actuators/pump', 'OFF')
+
+                        mainwin.statusDock.update_pump_status(pump_cmd)
+
+                    except:
+                        pass
+                        
+                except Exception as e:
+                    ic("Error parsing JSON: " + str(e)) 
 
 
    
@@ -136,53 +142,65 @@ class ConnectionDock(QDockWidget):
             self.mc.subscribe_to(self.topic)
             
 class StatusDock(QDockWidget):
-    """Status """
-    def __init__(self,mc):
+    """Greenhouse Status Monitor"""
+    def __init__(self, mc):
         QDockWidget.__init__(self)        
         self.mc = mc
-        self.boilerTemp = QLabel()
-        self.boilerTemp.setText("80")
-        self.boilerTemp.setStyleSheet("color: red")
-        self.freezerTemp = QLabel()
-        self.freezerTemp.setText("-5")
-        self.freezerTemp.setStyleSheet("color: blue")
-        self.fridgeTemp = QLabel()
-        self.fridgeTemp.setText("4")
-        self.fridgeTemp.setStyleSheet("color: green")
-        self.wifi = QLabel()
-        self.wifi.setText("Normal")
-        self.wifi.setStyleSheet("color: green")
-        self.door = QLabel()
-        self.door.setText("Closed")
-        self.door.setStyleSheet("color: green")
-        self.eRecMess=QTextEdit()
-        self.eSubscribeButton = QPushButton("Subscribe",self)
+        
+        self.labelTemp = QLabel("Temperature:")
+        self.labelTemp.setFont(QFont('Arial', 12))
+        self.valTemp = QLabel("-- °C")
+        self.valTemp.setStyleSheet("color: red; font-weight: bold; font-size: 20pt")
+        
+        self.labelHum = QLabel("Humidity:")
+        self.labelHum.setFont(QFont('Arial', 12))
+        self.valHum = QLabel("-- %")
+        self.valHum.setStyleSheet("color: blue; font-weight: bold; font-size: 20pt")
+
+        self.labelPump = QLabel("Water Pump:")
+        self.labelPump.setFont(QFont('Arial', 12))
+        self.valPump = QLabel("OFF")
+        self.valPump.setStyleSheet("color: gray; font-weight: bold; font-size: 20pt; border: 2px solid gray; padding: 5px;")
+
+        self.eRecMess = QTextEdit()
+        
+        self.eSubscribeButton = QPushButton("Start Monitoring (Subscribe)", self)
         self.eSubscribeButton.clicked.connect(self.on_button_subscribe_click)       
-        formLayot=QFormLayout()
-        formLayot.addRow("Boiler temperature:", self.boilerTemp)
-        formLayot.addRow("Freezer temperature:", self.freezerTemp)
-        formLayot.addRow("Refrigerator temperature:", self.fridgeTemp)
-        formLayot.addRow("WI-Fi status:",self.wifi)
-        formLayot.addRow("Main Door:",self.door)        
-        formLayot.addRow("Alarm Messages:",self.eRecMess)
-        formLayot.addRow("",self.eSubscribeButton)                
+        self.eSubscribeButton.setStyleSheet("background-color: orange; font-weight: bold;")
+
+        formLayot = QFormLayout()
+        formLayot.addRow(self.labelTemp, self.valTemp)
+        formLayot.addRow(self.labelHum, self.valHum)
+        formLayot.addRow("-----------------", QLabel("")) # קו מפריד
+        formLayot.addRow(self.labelPump, self.valPump) # הוספנו את המשאבה
+        formLayot.addRow("-----------------", QLabel(""))
+        formLayot.addRow("Alerts / Logs:", self.eRecMess)
+        formLayot.addRow("", self.eSubscribeButton)                
+        
         widget = QWidget(self)
         widget.setLayout(formLayot)
         self.setTitleBarWidget(widget)
         self.setWidget(widget)     
-        self.setWindowTitle("Status") 
+        self.setWindowTitle("Greenhouse Status") 
         
     def on_button_subscribe_click(self):        
-        self.mc.subscribe_to(comm_topic+'alarm')
-        self.eSubscribeButton.setStyleSheet("background-color: green")
+        self.mc.subscribe_to('greenhouse/#')
+        self.eSubscribeButton.setStyleSheet("background-color: green; color: white;")
+        self.eSubscribeButton.setText("Monitoring Active")
     
-    # create function that update text in received message window
-    def update_mess_win(self,text):
-        self.eRecMess.append(text)              
-       
-    def on_button_publish_click(self):
-        self.mc.publish_to(self.ePublisherTopic.text(), self.eMessageBox.toPlainText())
-        self.ePublishButton.setStyleSheet("background-color: yellow")
+    def update_sensors(self, temp, hum):
+        self.valTemp.setText(temp + " °C")
+        self.valHum.setText(hum + " %")
+
+    def update_pump_status(self, status):
+        self.valPump.setText(status)
+        if status == "ON":
+            self.valPump.setStyleSheet("color: white; background-color: green; font-weight: bold; font-size: 20pt; padding: 5px;")
+        else:
+            self.valPump.setStyleSheet("color: gray; background-color: none; font-weight: bold; font-size: 20pt; border: 2px solid gray; padding: 5px;")
+
+    def update_mess_win(self, text):
+        self.eRecMess.append(text)
         
 class GraphsDock(QDockWidget):
     """Graphs """
@@ -447,27 +465,17 @@ class PlotDock(QDockWidget):
 class MainWindow(QMainWindow):    
     def __init__(self, parent=None):
         QMainWindow.__init__(self, parent)                
-        # Init of Mqtt_client class
-        # self.mc=Mqtt_client()
-        self.mc=MC()        
-        # general GUI settings
+        
+        self.mc = MC()        
         self.setUnifiedTitleAndToolBarOnMac(True)
-        # set up main window
-        self.setGeometry(30, 100, 800, 600)
-        self.setWindowTitle('System GUI')
-        # Init QDockWidget objects        
+        self.setGeometry(30, 100, 500, 600)
+        self.setWindowTitle('Smart Greenhouse Manager')
+        
         self.connectionDock = ConnectionDock(self.mc)        
         self.statusDock = StatusDock(self.mc)
-        self.tempDock = TempDock(self.mc)
-        self.graphsDock = GraphsDock(self.mc)
-        self.airconditionDock= AirconditionDock(self.mc)
-        self.plotsDock = PlotDock()
+        
         self.addDockWidget(Qt.TopDockWidgetArea, self.connectionDock)
-        self.addDockWidget(Qt.TopDockWidgetArea, self.tempDock)
-        self.addDockWidget(Qt.TopDockWidgetArea, self.airconditionDock)
-        self.addDockWidget(Qt.BottomDockWidgetArea, self.statusDock)
-        self.addDockWidget(Qt.BottomDockWidgetArea, self.graphsDock)
-        self.addDockWidget(Qt.BottomDockWidgetArea, self.plotsDock)       
+        self.addDockWidget(Qt.BottomDockWidgetArea, self.statusDock)       
 
 if __name__ == "__main__":
     try:

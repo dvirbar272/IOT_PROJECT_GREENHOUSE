@@ -208,7 +208,7 @@ class MainWindow(QMainWindow):
             tmp_upd = 4          
             # Creating timer for update rate support
             self.timer = QtCore.QTimer(self)
-            self.timer.timeout.connect(self.create_data_Ref)
+            self.timer.timeout.connect(self.create_data_DHT)
             self.timer.start(int(self.update_rate)*1000) # in msec    
         # general GUI settings
         self.setUnifiedTitleAndToolBarOnMac(True)
@@ -261,19 +261,28 @@ class MainWindow(QMainWindow):
         temp=tmp_upd+random.randrange(-10,-5)/10        
         current_data=  'Temperature: '+str(temp)
         self.connectionDock.Temperature.setText(str(temp))        
-        self.mc.publish_to(self.topic_pub,current_data)
+        self.mc.publish_to('greenhouse/sensor/dht', current_data)
 
-    def create_data_Ref(self):
-        global tmp_upd
-        ic('Refrigerator data update')        
+    def create_data_DHT(self): 
+        ic('Greenhouse DHT Sensor Update')        
+        
         if not self.mc.connected:
             self.connectionDock.on_button_connect_click()
         if not self.mc.subscribed:
             self.mc.subscribe_to(self.topic_sub)
-        temp=tmp_upd+random.randrange(-10,-5)/10        
-        current_data=  'Temperature: '+str(temp)
-        self.connectionDock.Temperature.setText(str(temp))        
-        self.mc.publish_to(self.topic_pub,current_data)    
+            
+        
+        temp = random.randrange(200, 350) / 10.0
+        
+        humidity = random.randrange(40, 90)
+        
+     
+        current_data = f'{{"temp": {temp}, "hum": {humidity}}}'
+        
+        display_text = f"T: {temp}°C | H: {humidity}%"
+        self.connectionDock.Temperature.setText(display_text)        
+        
+        self.mc.publish_to('greenhouse/sensor/dht', current_data)  
 
     def create_data_Bo(self):
         global tmp_upd
@@ -293,7 +302,7 @@ if __name__ == '__main__':
         app = QApplication(sys.argv)
         argv=sys.argv
         if len(sys.argv)==1:
-            argv.append('Airconditioner')
+            argv.append('Refrigerator')
             argv.append('Celsius')
             argv.append('air-1')
             argv.append('7')
