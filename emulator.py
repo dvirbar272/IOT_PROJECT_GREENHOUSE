@@ -305,7 +305,7 @@ if __name__ == '__main__':
             argv.append('Refrigerator')
             argv.append('Celsius')
             argv.append('air-1')
-            argv.append('7')
+            argv.append('4')    
 
         mainwin = MainWindow(argv)
         mainwin.show()

@@ -73,7 +73,8 @@ class MC(Mqtt_client):
                     data = json.loads(m_decode)
                     temp = str(data['temp'])
                     hum = str(data['hum'])
-                    
+                    da.add_IOT_data('DHT_Temp', da.timestamp(), temp)
+                    da.add_IOT_data('DHT_Hum', da.timestamp(), hum)
                     try:
                         mainwin.statusDock.update_sensors(temp, hum)
                         

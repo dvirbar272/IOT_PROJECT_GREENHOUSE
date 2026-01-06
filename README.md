@@ -1,2 +1,2 @@
-# SmartHome
-Smart Home Manager GUI
+# SmartGreenhouse
+Smart greenhouse manager GUI

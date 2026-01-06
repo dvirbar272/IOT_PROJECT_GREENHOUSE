@@ -29,8 +29,8 @@ def create_connection(db_file=db_name):
     conn = None
     try:
         conn = sqlite3.connect(db_file)
-        pp = ('Conected to version: '+ sqlite3.version)
-        ic2(pp)
+        #pp = ('Conected to version: '+ sqlite3.version)
+        #ic2(pp)
         return conn
     except Error as e:
         ic2(e)
